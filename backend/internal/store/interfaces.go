@@ -71,6 +71,12 @@ type AuthStore interface {
 	VerifyEmail(ctx context.Context, email, code string) (userID, orgID, name, role string, err error)
 	ResendVerificationCode(ctx context.Context, email, code string, expires time.Time) (int64, error)
 	ValidateInviteToken(ctx context.Context, token string) (email, name, status string, err error)
+	// GetOrCreateOIDCUser finds a user by email, or provisions one into the
+	// self-hosted instance's single org — creating that org and making this
+	// the owner/admin if no org exists yet. Used only in OIDC-only mode,
+	// where access control lives at the identity provider, not the invite
+	// flow, so any identity the IdP vouches for gets an account.
+	GetOrCreateOIDCUser(ctx context.Context, email, name string) (userID, orgID, role string, err error)
 }
 
 // ---- Threads ----

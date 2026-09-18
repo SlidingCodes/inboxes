@@ -34,6 +34,7 @@ type MockStore struct {
 	SetResetTokenFn          func(ctx context.Context, email, token string, expires time.Time) (int64, error)
 	ResetPasswordFn          func(ctx context.Context, passwordHash, token string) (string, error)
 	ClaimInviteFn            func(ctx context.Context, passwordHash, name, token string) (string, string, string, string, error)
+	GetOrCreateOIDCUserFn    func(ctx context.Context, email, name string) (string, string, string, error)
 	VerifyEmailFn            func(ctx context.Context, email, code string) (string, string, string, string, error)
 	ResendVerificationCodeFn func(ctx context.Context, email, code string, expires time.Time) (int64, error)
 	ValidateInviteTokenFn    func(ctx context.Context, token string) (string, string, string, error)
@@ -341,6 +342,13 @@ func (m *MockStore) ClaimInvite(ctx context.Context, passwordHash, name, token s
 		return m.ClaimInviteFn(ctx, passwordHash, name, token)
 	}
 	return "", "", "", "", nil
+}
+
+func (m *MockStore) GetOrCreateOIDCUser(ctx context.Context, email, name string) (string, string, string, error) {
+	if m.GetOrCreateOIDCUserFn != nil {
+		return m.GetOrCreateOIDCUserFn(ctx, email, name)
+	}
+	return "", "", "", nil
 }
 
 func (m *MockStore) VerifyEmail(ctx context.Context, email, code string) (string, string, string, string, error) {

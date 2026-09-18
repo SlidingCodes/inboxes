@@ -44,6 +44,20 @@ When `STRIPE_KEY` is set (non-empty), the backend requires all of the following 
 | `RESEND_SYSTEM_API_KEY` | Resend API key used for system emails (invites, verification, password reset) |
 | `SYSTEM_FROM_ADDRESS` | Sender address for system emails, e.g. `noreply@yourdomain.com` |
 
+### OIDC / SSO (optional)
+
+Setting `OIDC_ISSUER_URL` switches the instance to **OIDC-only**: password signup, login, password reset, and email invites are all disabled, and the identity provider becomes the only way to sign in. Any identity the IdP vouches for is auto-provisioned on first login (the first ever login becomes the instance owner; everyone after joins as a member) — so access control needs to live at the IdP, not in this app.
+
+| Variable | Notes |
+|----------|-------|
+| `OIDC_ISSUER_URL` | The provider's issuer URL. Must be `https://`. Setting this requires the two vars below too |
+| `OIDC_CLIENT_ID` | OAuth client ID registered with the provider |
+| `OIDC_CLIENT_SECRET` | OAuth client secret registered with the provider |
+
+**Cloudflare Access setup** (works with any standard OIDC provider, this is just the one we use): Zero Trust dashboard → Access → Applications → Add an application → SaaS → OIDC. Set the callback URL to `https://<your-domain>/api/auth/oidc/callback`, then copy the Issuer, Client ID, and Client Secret it gives you into the vars above. Access enforces its own login + allowlist policy in front of the tunnel before a request ever reaches this app, so provisioning here trusts that gate completely.
+
+Discovery against the issuer happens once at backend boot; if the issuer is briefly unreachable the container will exit and retry under `restart: unless-stopped`.
+
 ### Optional
 
 | Variable | Default | Notes |

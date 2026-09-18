@@ -324,9 +324,9 @@ func TestCookieDomain(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := cookieDomain(tt.appURL)
+			got := CookieDomain(tt.appURL)
 			if got != tt.want {
-				t.Errorf("cookieDomain(%q) = %q, want %q", tt.appURL, got, tt.want)
+				t.Errorf("CookieDomain(%q) = %q, want %q", tt.appURL, got, tt.want)
 			}
 		})
 	}

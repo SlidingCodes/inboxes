@@ -17,6 +17,7 @@ import (
 	"github.com/inboxes/backend/internal/config"
 	"github.com/inboxes/backend/internal/db"
 	"github.com/inboxes/backend/internal/event"
+	"github.com/inboxes/backend/internal/handler"
 	"github.com/inboxes/backend/internal/mcp"
 	"github.com/inboxes/backend/internal/queue"
 	"github.com/inboxes/backend/internal/router"
@@ -140,6 +141,26 @@ func main() {
 	// MCP server for agent access; the router hands itself back to it.
 	mcpSrv := mcp.NewServer(pool, cfg.SessionSecret, cfg.PublicURL)
 
+	// OIDC (optional): discovery is a network call against the issuer, so a
+	// failure here is fatal at boot rather than a per-request surprise later.
+	var oidcHandler *handler.OIDCHandler
+	if cfg.OIDCIssuerURL != "" {
+		oidcHandler, err = handler.NewOIDCHandler(ctx, handler.OIDCConfig{
+			Store:        st,
+			RDB:          rdb,
+			Secret:       cfg.SessionSecret,
+			AppURL:       cfg.AppURL,
+			IssuerURL:    cfg.OIDCIssuerURL,
+			ClientID:     cfg.OIDCClientID,
+			ClientSecret: cfg.OIDCClientSecret,
+			RedirectURL:  cfg.PublicURL + "/api/auth/oidc/callback",
+		})
+		if err != nil {
+			slog.Error("failed to init OIDC", "error", err)
+			os.Exit(1)
+		}
+	}
+
 	// Router
 	r := router.New(pool, rdb, encSvc, resendSvc, bus, wsHub, orgLimiterMap, router.Config{
 		Secret:              cfg.SessionSecret,
@@ -151,6 +172,7 @@ func main() {
 		EventCatchupMaxAge:  cfg.EventCatchupMaxAge,
 		AppCtx:              ctx,
 		MCP:                 mcpSrv,
+		OIDC:                oidcHandler,
 	})
 
 	// Server

@@ -166,10 +166,10 @@ func GenerateToken(secret, userID, orgID, role string) (tokenStr string, jti str
 	return
 }
 
-// cookieDomain derives a cross-subdomain cookie domain from appURL.
+// CookieDomain derives a cross-subdomain cookie domain from appURL.
 // For "https://app.inboxes.net" it returns ".inboxes.net".
 // For localhost, IPs, or single-label hosts it returns "" (browser default).
-func cookieDomain(appURL string) string {
+func CookieDomain(appURL string) string {
 	u, err := url.Parse(appURL)
 	if err != nil {
 		return ""
@@ -202,7 +202,7 @@ func SetTokenCookie(w http.ResponseWriter, token, appURL string) {
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	}
-	if d := cookieDomain(appURL); d != "" {
+	if d := CookieDomain(appURL); d != "" {
 		c.Domain = d
 	}
 	http.SetCookie(w, c)
@@ -221,7 +221,7 @@ func SetTokenCookie(w http.ResponseWriter, token, appURL string) {
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	}
-	if d := cookieDomain(appURL); d != "" {
+	if d := CookieDomain(appURL); d != "" {
 		m.Domain = d
 	}
 	http.SetCookie(w, m)
@@ -238,7 +238,7 @@ func ClearTokenCookie(w http.ResponseWriter, appURL string) {
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	}
-	if d := cookieDomain(appURL); d != "" {
+	if d := CookieDomain(appURL); d != "" {
 		c.Domain = d
 	}
 	http.SetCookie(w, c)
@@ -252,7 +252,7 @@ func ClearTokenCookie(w http.ResponseWriter, appURL string) {
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	}
-	if d := cookieDomain(appURL); d != "" {
+	if d := CookieDomain(appURL); d != "" {
 		m.Domain = d
 	}
 	http.SetCookie(w, m)

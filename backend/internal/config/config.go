@@ -29,6 +29,14 @@ type Config struct {
 	// System email sender (required in commercial mode)
 	SystemFromAddress string
 
+	// OIDC (optional — when OIDCIssuerURL is empty, password login stays
+	// active and no SSO routes are mounted). Setting it switches the
+	// instance to OIDC-only: password signup/login/reset/invite routes are
+	// no longer mounted, so the identity provider is the only way in.
+	OIDCIssuerURL    string
+	OIDCClientID     string
+	OIDCClientSecret string
+
 	EventRetentionDays int
 
 	// Worker intervals (configurable via env vars, Go duration strings)
@@ -68,6 +76,10 @@ func Load() (*Config, error) {
 		StripePriceID:       os.Getenv("STRIPE_PRICE_ID"),
 
 		SystemFromAddress: os.Getenv("SYSTEM_FROM_ADDRESS"),
+
+		OIDCIssuerURL:    os.Getenv("OIDC_ISSUER_URL"),
+		OIDCClientID:     os.Getenv("OIDC_CLIENT_ID"),
+		OIDCClientSecret: os.Getenv("OIDC_CLIENT_SECRET"),
 
 		EventRetentionDays: GetEnvInt("EVENT_RETENTION_DAYS", 90),
 
@@ -172,6 +184,19 @@ func Load() (*Config, error) {
 		}
 		if cfg.SystemFromAddress == "" {
 			return nil, fmt.Errorf("SYSTEM_FROM_ADDRESS is required when STRIPE_KEY is set (commercial mode)")
+		}
+	}
+
+	// OIDC cross-validation: issuer implies a full client registration.
+	if cfg.OIDCIssuerURL != "" {
+		if cfg.OIDCClientID == "" {
+			return nil, fmt.Errorf("OIDC_CLIENT_ID is required when OIDC_ISSUER_URL is set")
+		}
+		if cfg.OIDCClientSecret == "" {
+			return nil, fmt.Errorf("OIDC_CLIENT_SECRET is required when OIDC_ISSUER_URL is set")
+		}
+		if !strings.HasPrefix(cfg.OIDCIssuerURL, "https://") {
+			return nil, fmt.Errorf("OIDC_ISSUER_URL must be an https:// URL, got: %s", cfg.OIDCIssuerURL)
 		}
 	}
 

@@ -4,9 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // hashSecretToken returns the hex SHA-256 of a high-entropy token. Reset and
@@ -136,4 +139,61 @@ func (s *PgStore) ValidateInviteToken(ctx context.Context, token string) (string
 		hashSecretToken(token),
 	).Scan(&email, &name, &status)
 	return email, name, status, err
+}
+
+// GetOrCreateOIDCUser must run inside a transaction (caller uses WithTx): it
+// reads then writes across two tables, and a self-hosted instance's first
+// two OIDC logins racing would otherwise be able to create two orgs.
+func (s *PgStore) GetOrCreateOIDCUser(ctx context.Context, email, name string) (string, string, string, error) {
+	var userID, orgID, role string
+	err := s.q.QueryRow(ctx,
+		`SELECT id, org_id, role FROM users WHERE email = $1`, email,
+	).Scan(&userID, &orgID, &role)
+	if err == nil {
+		// A placeholder/invited user's first OIDC login activates them, the
+		// same way claiming an emailed invite would.
+		if _, updErr := s.q.Exec(ctx,
+			`UPDATE users SET status = 'active', invite_token = NULL, invite_expires_at = NULL
+			 WHERE id = $1 AND status IN ('placeholder', 'invited')`,
+			userID,
+		); updErr != nil {
+			return "", "", "", fmt.Errorf("activate oidc user: %w", updErr)
+		}
+		return userID, orgID, role, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return "", "", "", fmt.Errorf("lookup oidc user: %w", err)
+	}
+
+	// Unknown identity: self-hosted is single-org, so reuse the existing org
+	// if one exists, or bootstrap it (and make this first user its owner).
+	var orgCount int
+	if err := s.q.QueryRow(ctx, `SELECT COUNT(*) FROM orgs`).Scan(&orgCount); err != nil {
+		return "", "", "", fmt.Errorf("count orgs: %w", err)
+	}
+
+	isOwner := orgCount == 0
+	if isOwner {
+		role = "admin"
+		if err := s.q.QueryRow(ctx,
+			`INSERT INTO orgs (name) VALUES ($1) RETURNING id`, "Team",
+		).Scan(&orgID); err != nil {
+			return "", "", "", fmt.Errorf("create org: %w", err)
+		}
+	} else {
+		role = "member"
+		if err := s.q.QueryRow(ctx, `SELECT id FROM orgs ORDER BY created_at LIMIT 1`).Scan(&orgID); err != nil {
+			return "", "", "", fmt.Errorf("find org: %w", err)
+		}
+	}
+
+	err = s.q.QueryRow(ctx,
+		`INSERT INTO users (org_id, email, name, role, status, email_verified, is_owner)
+		 VALUES ($1, $2, $3, $4, 'active', true, $5) RETURNING id`,
+		orgID, email, name, role, isOwner,
+	).Scan(&userID)
+	if err != nil {
+		return "", "", "", fmt.Errorf("create oidc user: %w", err)
+	}
+	return userID, orgID, role, nil
 }

@@ -1,7 +1,7 @@
 // In local dev, NEXT_PUBLIC_API_URL points to backend (http://localhost:8080).
 // In production behind a reverse proxy, both frontend and API share the same domain,
 // so we use relative paths (empty string).
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 // Module-level flag to suppress cascading 401 API calls once session expires
 let sessionExpired = false;

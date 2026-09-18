@@ -33,6 +33,10 @@ type Config struct {
 	// OAuth authorization-server routes, and hands the finished router back
 	// to the MCP server for in-process tool calls.
 	MCP *mcp.Server
+	// OIDC, when set, mounts SSO login/callback routes and unmounts password
+	// auth routes. Built in main.go because discovery against the issuer is
+	// a fallible network call.
+	OIDC *handler.OIDCHandler
 }
 
 func New(db *pgxpool.Pool, rdb *redis.Client, encSvc *service.EncryptionService, resendSvc *service.ResendService, bus *event.Bus, wsHub *ws.Hub, limiterMap *queue.OrgLimiterMap, cfg Config) *chi.Mux {
@@ -126,9 +130,10 @@ func New(db *pgxpool.Pool, rdb *redis.Client, encSvc *service.EncryptionService,
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"api_url":    appURL,
-			"ws_url":     wsURL,
-			"commercial": stripeKey != "",
+			"api_url":      appURL,
+			"ws_url":       wsURL,
+			"commercial":   stripeKey != "",
+			"oidc_enabled": cfg.OIDC != nil,
 		})
 	})
 
@@ -137,15 +142,22 @@ func New(db *pgxpool.Pool, rdb *redis.Client, encSvc *service.EncryptionService,
 	r.With(middleware.RateLimitByIP(rdb, 3, 15*60)).Post("/api/setup", setup.Setup)
 	r.With(middleware.RateLimitByIP(rdb, 3, 15*60)).Post("/api/setup/validate-key", setup.ValidateKey)
 
-	// Public auth (always rate-limited)
-	r.With(middleware.RateLimitByIP(rdb, 5, 1*60*60)).Post("/api/auth/signup", auth.Signup)
-	r.With(middleware.RateLimitByIP(rdb, 10, 15*60), middleware.RateLimitByBodyField(rdb, "email", 10, 15*60)).Post("/api/auth/login", auth.Login)
-	r.With(middleware.RateLimitByIP(rdb, 3, 1*60*60), middleware.RateLimitByBodyField(rdb, "email", 3, 1*60*60)).Post("/api/auth/forgot-password", auth.ForgotPassword)
-	r.With(middleware.RateLimitByIP(rdb, 5, 15*60)).Post("/api/auth/reset-password", auth.ResetPassword)
-	r.With(middleware.RateLimitByIP(rdb, 5, 15*60)).Post("/api/auth/claim", auth.Claim)
-	r.With(middleware.RateLimitByIP(rdb, 10, 15*60)).Get("/api/auth/claim/validate", auth.ValidateClaim)
-	r.With(middleware.RateLimitByIP(rdb, 5, 15*60), middleware.RateLimitByBodyField(rdb, "email", 5, 15*60)).Post("/api/auth/verify-email", auth.VerifyEmail)
-	r.With(middleware.RateLimitByIP(rdb, 3, 1*60*60), middleware.RateLimitByBodyField(rdb, "email", 3, 1*60*60)).Post("/api/auth/resend-verification", auth.ResendVerification)
+	// Public auth (always rate-limited). Password routes are only mounted
+	// when OIDC is not configured — see config.Load: setting OIDC_ISSUER_URL
+	// makes the identity provider the sole way in.
+	if cfg.OIDC == nil {
+		r.With(middleware.RateLimitByIP(rdb, 5, 1*60*60)).Post("/api/auth/signup", auth.Signup)
+		r.With(middleware.RateLimitByIP(rdb, 10, 15*60), middleware.RateLimitByBodyField(rdb, "email", 10, 15*60)).Post("/api/auth/login", auth.Login)
+		r.With(middleware.RateLimitByIP(rdb, 3, 1*60*60), middleware.RateLimitByBodyField(rdb, "email", 3, 1*60*60)).Post("/api/auth/forgot-password", auth.ForgotPassword)
+		r.With(middleware.RateLimitByIP(rdb, 5, 15*60)).Post("/api/auth/reset-password", auth.ResetPassword)
+		r.With(middleware.RateLimitByIP(rdb, 5, 15*60)).Post("/api/auth/claim", auth.Claim)
+		r.With(middleware.RateLimitByIP(rdb, 10, 15*60)).Get("/api/auth/claim/validate", auth.ValidateClaim)
+		r.With(middleware.RateLimitByIP(rdb, 5, 15*60), middleware.RateLimitByBodyField(rdb, "email", 5, 15*60)).Post("/api/auth/verify-email", auth.VerifyEmail)
+		r.With(middleware.RateLimitByIP(rdb, 3, 1*60*60), middleware.RateLimitByBodyField(rdb, "email", 3, 1*60*60)).Post("/api/auth/resend-verification", auth.ResendVerification)
+	} else {
+		r.With(middleware.RateLimitByIP(rdb, 20, 15*60)).Get("/api/auth/oidc/login", cfg.OIDC.Login)
+		r.With(middleware.RateLimitByIP(rdb, 20, 15*60)).Get("/api/auth/oidc/callback", cfg.OIDC.Callback)
+	}
 
 	// Webhooks (signature-verified, not JWT)
 	r.With(middleware.RateLimitByIP(rdb, 60, 60)).Post("/api/webhooks/resend/{orgId}", webhooks.HandleResend)

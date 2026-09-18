@@ -52,6 +52,10 @@ services:
       PUBLIC_URL: ${PUBLIC_URL}
       API_PORT: "8080"
       RESEND_SYSTEM_API_KEY: ${RESEND_SYSTEM_API_KEY:-}
+      # ── OIDC / SSO (leave empty to keep password login) ──
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
       # ── Commercial mode (leave empty for self-hosted) ──
       STRIPE_KEY: ${STRIPE_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}

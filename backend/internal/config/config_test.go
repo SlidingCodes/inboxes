@@ -154,6 +154,46 @@ func TestLoad_ValidConfig(t *testing.T) {
 	}
 }
 
+func TestLoad_OIDCIssuerRequiresClientCredentials(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("OIDC_ISSUER_URL", "https://idp.example.com")
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for OIDC_ISSUER_URL without client credentials, got nil")
+	}
+	if !strings.Contains(err.Error(), "OIDC_CLIENT_ID") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestLoad_OIDCIssuerRequiresHTTPS(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("OIDC_ISSUER_URL", "http://idp.example.com")
+	t.Setenv("OIDC_CLIENT_ID", "client")
+	t.Setenv("OIDC_CLIENT_SECRET", "secret")
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for non-https OIDC_ISSUER_URL, got nil")
+	}
+	if !strings.Contains(err.Error(), "https://") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestLoad_OIDCValidConfig(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("OIDC_ISSUER_URL", "https://idp.example.com")
+	t.Setenv("OIDC_CLIENT_ID", "client")
+	t.Setenv("OIDC_CLIENT_SECRET", "secret")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.OIDCIssuerURL != "https://idp.example.com" {
+		t.Errorf("OIDCIssuerURL: got %q", cfg.OIDCIssuerURL)
+	}
+}
+
 func TestLoad_DefaultDatabaseURL(t *testing.T) {
 	setValidEnv(t)
 	t.Setenv("DATABASE_URL", "")

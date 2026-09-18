@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, API_URL } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -32,6 +32,9 @@ function LoginForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showSignup, setShowSignup] = useState(true);
+  // null while /api/config hasn't answered yet — avoids flashing the
+  // password form before we know SSO is the only real option.
+  const [oidcEnabled, setOidcEnabled] = useState<boolean | null>(null);
 
   // Only same-origin relative paths are valid post-login destinations. Reject a
   // leading backslash too: browsers read "/\evil.com" as "//evil.com" and would
@@ -45,6 +48,12 @@ function LoginForm() {
       : "";
 
   useEffect(() => {
+    if (searchParams.get("error") === "sso_failed") {
+      setError("Sign-in was not completed. Please try again.");
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     // A user with a valid session does not need the login form.
     api
       .get("/api/users/me", { noLatch: true })
@@ -56,14 +65,16 @@ function LoginForm() {
 
   useEffect(() => {
     api
-      .get<{ commercial: boolean }>("/api/setup/status")
+      .get<{ commercial: boolean; oidc_enabled?: boolean }>("/api/config")
       .then((res) => {
+        setOidcEnabled(!!res.oidc_enabled);
         if (!res.commercial) {
           setShowSignup(false);
         }
       })
       .catch(() => {
-        // If status check fails, keep signup link visible
+        // If the check fails, fall back to password login.
+        setOidcEnabled(false);
       });
   }, []);
 
@@ -98,6 +109,39 @@ function LoginForm() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (oidcEnabled === null) {
+    return null;
+  }
+
+  if (oidcEnabled) {
+    const ssoHref = `${API_URL}/api/auth/oidc/login${next ? `?next=${encodeURIComponent(next)}` : ""}`;
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Welcome back</CardTitle>
+          <CardDescription>Sign in with your organization account</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {error && (
+            <div role="alert" className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
+              {error}
+            </div>
+          )}
+        </CardContent>
+        <CardFooter>
+          <Button
+            className="w-full"
+            onClick={() => {
+              window.location.href = ssoHref;
+            }}
+          >
+            Continue with SSO
+          </Button>
+        </CardFooter>
+      </Card>
+    );
   }
 
   return (
