@@ -16,7 +16,7 @@ require (
 	github.com/redis/go-redis/v9 v9.7.0
 	github.com/stripe/stripe-go/v84 v84.4.0
 	golang.org/x/crypto v0.36.0
-	golang.org/x/oauth2 v0.24.0
+	golang.org/x/oauth2 v0.27.0
 )
 
 require (
